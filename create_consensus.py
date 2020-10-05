@@ -21,7 +21,6 @@ from Bio.Seq import Seq
 from collections import defaultdict, Counter
 from argparse import ArgumentParser
 
-
 # TODO add option to clusters tags allowing for mismatches
 # TODO add option to cluster tags with a window size in position
 # TODO add option to clusters taking into consideration the cigar string (mapping end coordinate)
@@ -46,7 +45,8 @@ def consensus_quality(qual_list):
 def main():
     parser = ArgumentParser()
     parser.add_argument('infile', type=str, help="input BAM file")
-    parser.add_argument("--outfile", action="store", dest="outfile", help="output BAM file [out.bam]", default="out.bam")
+    parser.add_argument("--outfile", action="store", dest="outfile", help="output BAM file [out.bam]",
+                        default="out.bam")
     parser.add_argument('--min_reads', type=int, default=3, dest='min_reads',
                         help="Minimum number of reads allowed to comprise a consensus. [3]")
     parser.add_argument('--max_reads', type=int, default=1000, dest='max_reads',
@@ -171,21 +171,21 @@ def main():
                 a.template_length = record.template_length
                 a.query_qualities = consensus_qual
                 #  Store records (there must be one record per tag)
-                consensus_dict[tag] = a
+                consensus_dict[tag.split(":")[0]] = a
         # Iterate consensus dict to find duplexs otherwise write simplex
         processed = set()
         for tag, record in consensus_dict.items():
             #  Check if pair has been processed already
             if tag in processed:
                 continue
-            clean_tag, index = tag.split(":")
-            switch_tag = "{}{}:{}".format(clean_tag[int(len(clean_tag) / 2):],
-                                          clean_tag[:int(len(clean_tag) / 2)],
-                                          index)
+            switch_tag = "{}{}".format(tag[int(len(tag) / 2):], tag[:int(len(tag) / 2)])
+            #  Add to processed
+            processed.add(tag)
+            processed.add(switch_tag)
             try:
                 duplex = consensus_maker([record.query_sequence,
                                           consensus_dict[switch_tag].query_sequence],
-                                         cut_off)
+                                         1.0)
                 # Filter out duplex with too many Ns in them
                 if do_N_filter and (duplex.count("N") / float(len(duplex)) >= Ncut_off):
                     continue
@@ -207,8 +207,6 @@ def main():
             a.query_qualities = record.query_qualities
             #  Write SAM record
             out_bam_file.write(a)
-            #  Add to processed
-            processed.add(switch_tag)
     out_bam_file.close()
 
     # Write summary statistics
