@@ -179,13 +179,13 @@ def main():
             if tag in processed:
                 continue
             switch_tag = "{}{}".format(tag[int(len(tag) / 2):], tag[:int(len(tag) / 2)])
-            #  Add to processed
-            processed.add(tag)
-            processed.add(switch_tag)
             try:
                 duplex = consensus_maker([record.query_sequence,
                                           consensus_dict[switch_tag].query_sequence],
                                          1.0)
+                #  Add to processed
+                processed.add(tag)
+                processed.add(switch_tag)
                 # Filter out duplex with too many Ns in them
                 if do_N_filter and (duplex.count("N") / float(len(duplex)) >= Ncut_off):
                     continue
