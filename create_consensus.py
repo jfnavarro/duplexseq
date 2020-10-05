@@ -1,25 +1,26 @@
 #!/usr/bin/env python
 """
-This tools creates consensus reads using aligned pired-end reads with duplex tags
+This tools creates consensus reads using aligned paired-end reads with duplex tags
 in their headers.
 
-This is a simplified, modifed version of the code present in:
+This is a simplified, modified version of the code present in:
 
-Inputs: 
+https://github.com/Kennedy-Lab-UW/Duplex-Sequencing
+
+Input:
 	A position-sorted paired-end BAM file containing reads with a duplex tag in the header.
 
-Outputs:
+Output:
 	1: A BAM file containing SSCSs
 	2: A BAM file containing discarded reads
-
-	Note that quality scores in outputs 1, 2, and 3 are just space fillers and do not signify anything about the
-	quality of the sequence.
 
 Author: jc.fernandez.navarro@gmail.com
 """
 import pysam
+from Bio.Seq import Seq
 from collections import defaultdict, Counter
 from argparse import ArgumentParser
+
 
 # TODO add option to clusters tags allowing for mismatches
 # TODO add option to cluster tags with a window size in position
@@ -31,29 +32,37 @@ def consensus_maker(grouped_reads_list, cut_off):
     # Create a consensus read using the most_common letter from each position
     read_length = len(grouped_reads_list[0])
     num_reads = float(len(grouped_reads_list))
-    counters = [Counter([x[i] for x in grouped_reads_list]) for i in xrange(read_length)]
+    counters = [Counter([x[i] for x in grouped_reads_list]) for i in range(read_length)]
     consensus_read = ''.join(
         [c.most_common()[0][0] if (c.most_common()[0][1] / num_reads) > cut_off else 'N' for c in counters])
     return consensus_read
 
+def consensus_quality(qual_list):
+    # Qualities must have the same length
+    # Create a consensus quality using the average of the qualities
+    qual_avg = [int(sum(qual_score) / len(qual_list)) for qual_score in zip(*qual_list)]
+    return [x if x < 41 else 41 for x in qual_avg]
+
 def main():
     parser = ArgumentParser()
-    parser.add_argument("--infile", action="store", dest="infile", help="input BAM file", required=True)
-    parser.add_argument("--outfile", action="store", dest="outfile", help="output BAM file", required=True)
+    parser.add_argument('infile', type=str, help="input BAM file")
+    parser.add_argument("--outfile", action="store", dest="outfile", help="output BAM file [out.bam]", default="out.bam")
     parser.add_argument('--min_reads', type=int, default=3, dest='min_reads',
                         help="Minimum number of reads allowed to comprise a consensus. [3]")
     parser.add_argument('--max_reads', type=int, default=1000, dest='max_reads',
                         help="Maximum number of reads allowed to comprise a consensus. [1000]")
+    parser.add_argument('--homo_count', type=int, default=6, dest='rep_filt',
+                        help="Maximum number of homopolymer supported in the tag [A, C, G, T]. [6]")
     parser.add_argument('--cut_off', type=float, default=.7, dest='cut_off',
                         help="Percentage of nucleotides at a given position in a read that must be identical in order "
                              "for a consensus to be called at that position. [0.7]")
-    parser.add_argument('--filter-soft-clip', type=str, action="store_true", default=False, dest='softclip_filter',
+    parser.add_argument('--filter-soft-clip', action="store_true", default=False, dest='softclip_filter',
                         help="Discard reads that are soft-clipped in their alignment.")
-    parser.add_argument('--filter-overlap', type=str, action="store_true", default=False, dest='overlap_filter',
+    parser.add_argument('--filter-overlap', action="store_true", default=False, dest='overlap_filter',
                         help="Discard reads overlapping with their pair-end mate.")
-    parser.add_argument('--filter-pair', type=str, action="store_true", default=False, dest='pair_filter',
+    parser.add_argument('--filter-pair', action="store_true", default=False, dest='pair_filter',
                         help="Discard reads that do not have a proper pair-end mate.")
-    parser.add_argument('--filter-singleton', type=str, action="store_true", default=False, dest='single_filter',
+    parser.add_argument('--filter-singleton', action="store_true", default=False, dest='single_filter',
                         help="Discard reads that are singletons (only one pair is aligned).")
     parser.add_argument('--max_N', type=float, default=1, dest='Ncut_off',
                         help="Maximum fraction of Ns allowed in a consensus [1.0]")
@@ -64,8 +73,8 @@ def main():
     reads_count_filtered = 0
     discarded_count = 0
     consensus_count = 0
+    duplex_count = 0
     read_dict = defaultdict(lambda: defaultdict(list))
-    consensus_dict = {}
     min_reads = o.min_reads
     max_reads = o.max_reads
     homo_count = o.rep_filt
@@ -99,8 +108,10 @@ def main():
         # Overlap filter
         overlap = False
         if do_overlap_filter and proper_pair and not singleton:
-            overlap = (record.reference_start <= record.next_reference_start < (record.reference_start + record.query_length)) or \
-                      (record.next_reference_start <= record.reference_start < (record.next_reference_start + record.query_length))
+            overlap = (record.reference_start <= record.next_reference_start < (
+                    record.reference_start + record.query_length)) or \
+                      (record.next_reference_start <= record.reference_start < (
+                              record.next_reference_start + record.query_length))
 
         # soft_clip filter
         soft_clip = False
@@ -129,15 +140,18 @@ def main():
 
     # Iterate grouped reads to build consensus reads
     for pos, tag_records in read_dict.items():
+        consensus_dict = {}
         for tag, records in tag_records.items():
             sequences = [x.query_sequence for x in records]
+            qualities = [x.query_qualities for x in records]
             num_sequences = len(sequences)
-            if min_reads <= num_sequences <= max_reads:
+            if num_sequences >= min_reads and num_sequences <= max_reads:
                 #  All sequences same length filter
                 first_length = len(sequences[0])
                 if not all(len(x) == first_length for x in sequences):
                     continue
                 consensus = consensus_maker(sequences, cut_off)
+                consensus_qual = consensus_quality(qualities)
                 # Filter out consensuses with too many Ns in them
                 if do_N_filter and (consensus.count("N") / float(len(consensus)) >= Ncut_off):
                     continue
@@ -155,27 +169,55 @@ def main():
                 a.next_reference_id = record.next_reference_id
                 a.next_reference_start = record.next_reference_start
                 a.template_length = record.template_length
-                a.qual = 'J' * record.query_length
-                # Write SAM record
-                altTag = tag.replace(("1" if "1" in tag else "2"), ("2" if "1" in tag else "1"))
-                if altTag in consensus_dict:
-                    if a.is_read1:
-                        out_bam_file.write(a)
-                        out_bam_file.write(consensus_dict.pop(altTag))
-                    else:
-                        out_bam_file.write(consensus_dict.pop(altTag))
-                        out_bam_file.write(a)
-                else:
-                    consensus_dict[tag] = a
-
+                a.query_qualities = consensus_qual
+                #  Store records (there must be one record per tag)
+                consensus_dict[tag] = a
+        # Iterate consensus dict to find duplexs otherwise write simplex
+        processed = set()
+        for tag, record in consensus_dict.items():
+            #  Check if pair has been processed already
+            if tag in processed:
+                continue
+            clean_tag, index = tag.split(":")
+            switch_tag = "{}{}:{}".format(clean_tag[int(len(clean_tag) / 2):],
+                                          clean_tag[:int(len(clean_tag) / 2)],
+                                          index)
+            try:
+                duplex = consensus_maker([record.query_sequence,
+                                          consensus_dict[switch_tag].query_sequence],
+                                         cut_off)
+                # Filter out duplex with too many Ns in them
+                if do_N_filter and (duplex.count("N") / float(len(duplex)) >= Ncut_off):
+                    continue
+                duplex_count += 1
+            except KeyError:
+                duplex = record.query_sequence
+            # Create SAM record
+            a = pysam.AlignedRead()
+            a.query_name = tag
+            a.flag = record.flag
+            a.query_sequence = str(Seq(duplex).reverse_complement()) if a.is_reverse else duplex
+            a.reference_id = record.reference_id
+            a.reference_start = record.reference_start
+            a.mapping_quality = 255
+            a.cigartuples = record.cigartuples
+            a.next_reference_id = record.next_reference_id
+            a.next_reference_start = record.next_reference_start
+            a.template_length = record.template_length
+            a.query_qualities = record.query_qualities
+            #  Write SAM record
+            out_bam_file.write(a)
+            #  Add to processed
+            processed.add(switch_tag)
     out_bam_file.close()
 
     # Write summary statistics
-    print("Summary Statistics:")
+    print("Summary:")
     print("Reads processed: {}".format(reads_count))
     print("Reads discarded: {}".format(discarded_count))
     print("Reads passing filters: {}".format(reads_count_filtered))
     print("Consensus Made: {}".format(consensus_count))
+    print("Duplex Made: {}".format(duplex_count))
 
 if __name__ == "__main__":
     main()
