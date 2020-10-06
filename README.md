@@ -13,9 +13,9 @@ The reads are then clustered by tag-position and the consensus reads are created
 by collapsing these and finding the duplex pair to make a consensus call. 
 
 # Notes
-TAGs must be located at the beginning of the reads (0 position)
-The reads belonging to a tag-position cluster must have the same length or otherwise will be discarded.
-Different filters can be applied when creating the consensus reads (check --help)
+- TAGs must be located at the beginning of the reads (0 position)
+- The reads belonging to a tag-position cluster must have the same length or otherwise will be discarded.
+- Different filters can be applied when creating the consensus reads (check --help)
 
 # Requirements
 * Python 3
