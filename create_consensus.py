@@ -171,14 +171,18 @@ def main():
                 a.template_length = record.template_length
                 a.query_qualities = consensus_qual
                 #  Store records (there must be one record per tag)
-                consensus_dict[tag.split(":")[0]] = a
+                consensus_dict[tag] = a
         # Iterate consensus dict to find duplexs otherwise write simplex
         processed = set()
         for tag, record in consensus_dict.items():
             #  Check if pair has been processed already
             if tag in processed:
                 continue
-            switch_tag = "{}{}".format(tag[int(len(tag) / 2):], tag[:int(len(tag) / 2)])
+            clean_tag = tag.split(":")[0]
+            index = "2" if record.is_read1 else "1"
+            switch_tag = "{}{}:{}".format(clean_tag[int(len(clean_tag) / 2):],
+                                          clean_tag[:int(len(clean_tag) / 2)],
+                                          index)
             try:
                 duplex = consensus_maker([record.query_sequence,
                                           consensus_dict[switch_tag].query_sequence],
