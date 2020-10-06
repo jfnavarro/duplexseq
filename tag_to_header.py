@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """
-This script extracts UMIs from reads (FASTQ) generated with duplex
-sequencing protocol. The UMIs (1 and 2) are extracted from the reads
-and append to the read names.
+This script extracts TAGS from reads (FASTQ) generated with duplex
+sequencing protocol. The TAGS (1 and 2) are extracted from the reads (beginning, 0 position)
+and are then appended to the read names.
 
 This is a simplified, modified version of the code present in:
 
@@ -17,9 +17,8 @@ Output:
 Author: jc.fernandez.navarro@gmail.com
 """
 
-# TODO Pass UMI start position as parameter
+# TODO allow to pass the start position of the tag
 
-import sys
 import gzip
 from argparse import ArgumentParser
 from collections import defaultdict
@@ -115,9 +114,9 @@ def main():
 	parser.add_argument('--out-prefix', dest='out_prefix', type=str, default="out",
 						help='Prefix to prepend to the output files. [out]')
 	parser.add_argument('--taglen', dest='taglen', type=int, default=6,
-						help='Length in bases of the duplex tag sequence. [6]')
+						help='Length in bases of the tag sequence. [6]')
 	parser.add_argument('--spacerlen', dest='spclen', type=int, default=1,
-						help='Length in bases of the spacer sequence between the tag and the start of the DNA sequence. [1]')
+						help='Length in bases to trim after the tag [1]')
 	o = parser.parse_args()
 
 	reads_count = 0
@@ -130,19 +129,18 @@ def main():
 	out_R1_writer = writefq(out_R1_handle)
 	out_R2_handle = gzip.open("{}_R2.fq.gz".format(o.out_prefix), 'wt')
 	out_R2_writer = writefq(out_R2_handle)
-	for (header1, sequence1, quality1),\
-		(header2, sequence2, quality2) in zip(readfq(R1_handle), readfq(R2_handle)):
+	for (header1, seq1, qua1),\
+		(header2, seq2, qua2) in zip(readfq(R1_handle), readfq(R2_handle)):
 		reads_count += 1
-		# UMIs are located at the end of the reads
-		# TODO pass start position of the UMI as parameter
-		tag1, tag2 = sequence1[-o.taglen:], sequence2[-o.taglen:]
+		tag1 = seq1[:o.taglen]
+		tag2 = seq2[:o.taglen]
 		if tag1.isalpha() and tag1.count('N') == 0 and tag2.isalpha() and tag2.count('N') == 0:
 			out_R1_writer.send((hdr_rename(header1, tag1, tag2),
-								sequence1[:-(o.taglen + o.spclen)],
-								quality1[:-(o.taglen + o.spclen)]))
+								seq1[o.taglen + o.spclen:],
+								qua1[o.taglen + o.spclen:]))
 			out_R2_writer.send((hdr_rename(header2, tag1, tag2),
-								sequence2[:-(o.taglen + o.spclen)],
-								quality2[:-(o.taglen + o.spclen)]))
+								seq2[o.taglen + o.spclen:],
+								qua2[o.taglen + o.spclen:]))
 			barcode_dict[tag1 + tag2] += 1
 		else:
 			badtags_count += 1

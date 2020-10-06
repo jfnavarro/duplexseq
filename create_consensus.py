@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-This tools creates consensus reads using aligned paired-end reads with duplex tags
+This tool creates consensus reads using aligned paired-end reads with duplex tags
 in their headers.
 
 This is a simplified, modified version of the code present in:
@@ -11,7 +11,7 @@ Input:
 	A position-sorted paired-end BAM file containing reads with a duplex tag in the header.
 
 Output:
-	1: A BAM file containing SSCSs
+	1: A BAM file containing the duplexs
 	2: A BAM file containing discarded reads
 
 Author: jc.fernandez.navarro@gmail.com
@@ -23,8 +23,6 @@ from argparse import ArgumentParser
 
 # TODO add option to clusters tags allowing for mismatches
 # TODO add option to cluster tags with a window size in position
-# TODO add option to clusters taking into consideration the cigar string (mapping end coordinate)
-# TODO add option to allow for reads with different lengths
 
 def consensus_maker(grouped_reads_list, cut_off):
     # Reads must have the same length
@@ -47,13 +45,13 @@ def main():
     parser.add_argument('infile', type=str, help="input BAM file")
     parser.add_argument("--outfile", action="store", dest="outfile", help="output BAM file [out.bam]",
                         default="out.bam")
-    parser.add_argument('--min_reads', type=int, default=3, dest='min_reads',
+    parser.add_argument('--min-reads', type=int, default=3, dest='min_reads',
                         help="Minimum number of reads allowed to comprise a consensus. [3]")
-    parser.add_argument('--max_reads', type=int, default=1000, dest='max_reads',
+    parser.add_argument('--max-reads', type=int, default=1000, dest='max_reads',
                         help="Maximum number of reads allowed to comprise a consensus. [1000]")
-    parser.add_argument('--homo_count', type=int, default=6, dest='rep_filt',
+    parser.add_argument('--homo-count', type=int, default=6, dest='rep_filt',
                         help="Maximum number of homopolymer supported in the tag [A, C, G, T]. [6]")
-    parser.add_argument('--cut_off', type=float, default=.7, dest='cut_off',
+    parser.add_argument('--cutoff', type=float, default=.7, dest='cut_off',
                         help="Percentage of nucleotides at a given position in a read that must be identical in order "
                              "for a consensus to be called at that position. [0.7]")
     parser.add_argument('--filter-soft-clip', action="store_true", default=False, dest='softclip_filter',
@@ -64,7 +62,7 @@ def main():
                         help="Discard reads that do not have a proper pair-end mate.")
     parser.add_argument('--filter-singleton', action="store_true", default=False, dest='single_filter',
                         help="Discard reads that are singletons (only one pair is aligned).")
-    parser.add_argument('--max_N', type=float, default=1, dest='Ncut_off',
+    parser.add_argument('--maxN', type=float, default=1, dest='Ncut_off',
                         help="Maximum fraction of Ns allowed in a consensus [1.0]")
     o = parser.parse_args()
 
@@ -90,6 +88,7 @@ def main():
     in_bam_file = pysam.Samfile(o.infile, "rb")
     discarded_bam_file = pysam.Samfile('discarded.bam', "wb", template=in_bam_file)
     out_bam_file = pysam.Samfile(o.outfile, "wb", template=in_bam_file)
+    print("Grouping reads by position-tag...")
     for record in in_bam_file.fetch(until_eof=True):
         #  Only consider mapped reads
         if record.is_unmapped:
@@ -103,7 +102,7 @@ def main():
 
         # Mapping filters
         singleton = do_single_filter and record.mate_is_unmapped
-        proper_pair = do_pair_filter and record.is_proper_pair
+        proper_pair = do_pair_filter and not record.is_proper_pair
 
         # Overlap filter
         overlap = False
@@ -139,6 +138,7 @@ def main():
     discarded_bam_file.close()
 
     # Iterate grouped reads to build consensus reads
+    print("Creating consensus duplexs...")
     for pos, tag_records in read_dict.items():
         consensus_dict = {}
         for tag, records in tag_records.items():
@@ -159,7 +159,7 @@ def main():
                 # Create SAM record (assuming all records in the same position share common attributes)
                 record = records[0]
                 a = pysam.AlignedRead()
-                a.query_name = tag + ":" + str(num_sequences)
+                a.query_name = tag
                 a.flag = record.flag
                 a.query_sequence = consensus
                 a.reference_id = record.reference_id
@@ -184,12 +184,15 @@ def main():
                                           clean_tag[:int(len(clean_tag) / 2)],
                                           index)
             try:
-                duplex = consensus_maker([record.query_sequence,
-                                          consensus_dict[switch_tag].query_sequence],
-                                         1.0)
+                simplex1 = record.query_sequence
+                simplex2 = consensus_dict[switch_tag].query_sequence
                 #  Add to processed
                 processed.add(tag)
                 processed.add(switch_tag)
+                if len(simplex1) != len(simplex2):
+                    print("Found duplex pair with different lengths\n{}\n{}".format(simplex1, simplex2))
+                    continue
+                duplex = consensus_maker([simplex1, simplex2], 1.0)
                 # Filter out duplex with too many Ns in them
                 if do_N_filter and (duplex.count("N") / float(len(duplex)) >= Ncut_off):
                     continue
