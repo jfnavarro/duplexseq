@@ -62,8 +62,8 @@ def main():
                         help="Discard reads that do not have a proper pair-end mate.")
     parser.add_argument('--filter-singleton', action="store_true", default=False, dest='single_filter',
                         help="Discard reads that are singletons (only one pair is aligned).")
-    parser.add_argument('--maxN', type=float, default=1, dest='Ncut_off',
-                        help="Maximum fraction of Ns allowed in a consensus [1.0]")
+    parser.add_argument('--maxN', type=float, default=.5, dest='Ncut_off',
+                        help="Maximum fraction of Ns allowed in a consensus [0.5]")
     o = parser.parse_args()
 
     # Variables
