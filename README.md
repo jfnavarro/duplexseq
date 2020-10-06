@@ -46,11 +46,11 @@ Fourth, sort aligned reads by position
 
 Fifth, create consensus reads (use --help to see options)
 
-```create_consensus.py aligned_sorted.bam```
+```create_consensus.py --filter-pair --filter-singleton --filter-soft-clip aligned_sorted.bam```
 
 Sixth, sort consensus reads by name
 
-```samtools sort -n --threads THREADS out.bam > out_sorted_name.bam```
+```samtools sort -n --threads THREADS out_duplex.bam > out_sorted_name.bam```
 
 Last, convert sorted consensus reads to fastq format (if necessary)
 
