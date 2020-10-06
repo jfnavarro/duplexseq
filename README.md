@@ -21,7 +21,9 @@ https://github.com/Kennedy-Lab-UW/Duplex-Sequencing
 
 First, clone the repository and install the pipeline 
 
-´´´python setup.py install´´´
+´´´
+python setup.py install
+´´´
 
 Second, extract the tags from the reads and append them to the headers (use --help to see options)
 
