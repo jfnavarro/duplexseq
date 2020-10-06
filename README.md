@@ -46,7 +46,7 @@ Fourth, sort aligned reads by position
 
 Fifth, create consensus reads (use --help to see options)
 
-```create_consensus.py --filter-pair --filter-singleton --filter-soft-clip aligned_sorted.bam```
+```create_consensus.py --filter-pair --filter-singleton --filter-soft-clip --filter-secondary aligned_sorted.bam```
 
 Sixth, sort consensus reads by name
 
