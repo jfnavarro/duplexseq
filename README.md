@@ -17,7 +17,7 @@ https://github.com/Kennedy-Lab-UW/Duplex-Sequencing
 * bedtools
 * GATK
 
-# Workflow
+# Workflow
 
 First, clone the repository and install the pipeline 
 
