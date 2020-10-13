@@ -34,7 +34,7 @@ First, clone the repository and install the pipeline
 
 Second, extract the tags from the reads and append them to the headers (use --help to see options)
 
-```tag_to_header.py R1.fastq.gz R2.fastq.gz```
+```extract_umis.py R1.fastq.gz R2.fastq.gz```
 
 Third, align reads to the reference genome
 
@@ -47,15 +47,6 @@ Fourth, sort aligned reads by position
 Fifth, create consensus reads (use --help to see options)
 
 ```create_consensus.py --filter-pair --filter-singleton --filter-soft-clip --filter-secondary aligned_sorted.bam```
-
-Sixth, sort consensus reads by name
-
-```samtools sort -n --threads THREADS out_duplex.bam > out_sorted_name.bam```
-
-Last, convert sorted consensus reads to fastq format (if necessary)
-
-```bedtools bamtofastq -i out_sorted_name.bam -fq consensus_reads_R1.fastq -fq2 consensus_reads_R2.fastq```
-
 
 Now you can align with bwa again and compute variants following GATK best practices. 
 

@@ -3,8 +3,8 @@
 This tool creates consensus reads using aligned paired-end reads generated with
 the Duplex Sequencing method. The UMIs must be in the headers like this:
 
-HWI-ST1390:273:CDTB8ACXX:6:2316:21033:100486|ATACTGTCAATT#ab
-HWI-ST1390:273:CDTB8ACXX:6:2316:21033:100486|ATACTGTCAATT#ba
+HWI-ST1390:273:CDTB8ACXX:6:2316:21033:100486|ATACTGTCAATT
+HWI-ST1390:273:CDTB8ACXX:6:2316:21033:100486|ATACTGTCAATT
 ...
 
 This is a simplified, modified version of the code present in:
@@ -171,31 +171,39 @@ def main():
                 if do_N_filter and (consensus.count("N") / float(len(consensus)) >= Ncut_off):
                     continue
                 consensus_count += 1
-                tag_clean, info = tag.split("#")
-                consensus_dict[tag_clean][info] = (consensus, consensus_qual)
+                #  Store records (there must be one record per tag)
+                clean_tag, info = tag.split(":")
+                consensus_dict[tag][info] = (consensus, consensus_qual)
         # Iterate consensus dict to find duplexs otherwise write simplex
         for tag, record in consensus_dict.items():
+            # Create reversed tag
+            switch_tag = "{}{}".format(tag[int(len(tag) / 2):],
+                                       tag[:int(len(tag) / 2)])
+            
             duplex_read1 = None
             duplex_read2 = None
-            if len(record['ab:1']) != 0 and len(record['ba:2']) != 0:
-                duplex_seq = consensus_maker([record['ab:1'][0],
-                                              record['ba:2'][0]],
-                                             1.0)
-                duplex_qual = consensus_quality([record['ab:1'][1],
-                                                 record['ba:2'][1]])
-                # Filter out duplex with too many Ns in them
-                if not (do_N_filter and (duplex_seq.count("N") / float(len(duplex_seq)) >= Ncut_off)):
-                    duplex_read1 = (tag, duplex_seq, ''.join(chr(x + 33) for x in duplex_qual))
+            if switch_tag in consensus_dict:
+                print(record)
+                print(consensus_dict[switch_tag])
+                if len(record['1']) != 0 and len(consensus_dict[switch_tag]['2']) != 0:
+                    duplex_seq = consensus_maker([record['1'][0],
+                                                  consensus_dict[switch_tag]['2'][0]],
+                                                 1.0)
+                    duplex_qual = consensus_quality([record['1'][1],
+                                                     consensus_dict[switch_tag]['2'][1]])
+                    # Filter out duplex with too many Ns in them
+                    if not (do_N_filter and (duplex_seq.count("N") / float(len(duplex_seq)) >= Ncut_off)):
+                        duplex_read1 = (tag, duplex_seq, ''.join(chr(x + 33) for x in duplex_qual))
 
-            if len(record['ba:1']) != 0 and len(record['ab:2']) != 0:
-                duplex_seq = consensus_maker([record['ba:1'][0],
-                                              record['ab:2'][0]],
-                                             1.0)
-                duplex_qual = consensus_quality([record['ba:1'][1],
-                                                 record['ab:2'][1]])
-                # Filter out duplex with too many Ns in them
-                if not (do_N_filter and (duplex_seq.count("N") / float(len(duplex_seq)) >= Ncut_off)):
-                    duplex_read2 = (tag, duplex_seq, ''.join(chr(x + 33) for x in duplex_qual))
+                if len(record['2']) != 0 and len(consensus_dict[switch_tag]['1']) != 0:
+                    duplex_seq = consensus_maker([record['2'][0],
+                                                  consensus_dict[switch_tag]['1'][0]],
+                                                 1.0)
+                    duplex_qual = consensus_quality([record['2'][1],
+                                                     consensus_dict[switch_tag]['1'][1]])
+                    # Filter out duplex with too many Ns in them
+                    if not (do_N_filter and (duplex_seq.count("N") / float(len(duplex_seq)) >= Ncut_off)):
+                        duplex_read2 = (tag, duplex_seq, ''.join(chr(x + 33) for x in duplex_qual))
 
             if duplex_read1 is not None and duplex_read2 is not None:
                 duplex_count += 1
