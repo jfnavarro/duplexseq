@@ -173,8 +173,9 @@ def main():
                 consensus_count += 1
                 #  Store records (there must be one record per tag)
                 clean_tag, info = tag.split(":")
-                consensus_dict[tag][info] = (consensus, consensus_qual)
+                consensus_dict[clean_tag][info] = (consensus, consensus_qual)
         # Iterate consensus dict to find duplexs otherwise write simplex
+        processed = set()
         for tag, record in consensus_dict.items():
             # Create reversed tag
             switch_tag = "{}{}".format(tag[int(len(tag) / 2):],
@@ -182,9 +183,7 @@ def main():
             
             duplex_read1 = None
             duplex_read2 = None
-            if switch_tag in consensus_dict:
-                print(record)
-                print(consensus_dict[switch_tag])
+            if switch_tag in consensus_dict and switch_tag not in processed:
                 if len(record['1']) != 0 and len(consensus_dict[switch_tag]['2']) != 0:
                     duplex_seq = consensus_maker([record['1'][0],
                                                   consensus_dict[switch_tag]['2'][0]],
@@ -204,6 +203,8 @@ def main():
                     # Filter out duplex with too many Ns in them
                     if not (do_N_filter and (duplex_seq.count("N") / float(len(duplex_seq)) >= Ncut_off)):
                         duplex_read2 = (tag, duplex_seq, ''.join(chr(x + 33) for x in duplex_qual))
+
+                processed.add(switch_tag)
 
             if duplex_read1 is not None and duplex_read2 is not None:
                 duplex_count += 1

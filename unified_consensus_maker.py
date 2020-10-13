@@ -293,15 +293,12 @@ def main():
     numDCS = 0
     # Counter for number of high-N DCS filtered
     highN_DCS = 0
-    
-    # Open Files
-    if o.write_sscs is True:
-        read1_sscs_fq_file = gzip.open(f"{o.prefix}_read1_sscs.fq.gz", 'wt')
-        read2_sscs_fq_file = gzip.open(f"{o.prefix}_read2_sscs.fq.gz", 'wt')
+    numSimplex = 0
 
-    if o.without_dcs is False:
-        read1_dcs_fq_file = gzip.open(f"{o.prefix}_read1_dcs.fq.gz", 'wt')
-        read2_dcs_fq_file = gzip.open(f"{o.prefix}_read2_dcs.fq.gz", 'wt')
+    read1_dcs_fq_file = gzip.open(f"{o.prefix}_read1_duplex.fq.gz", 'wt')
+    read2_dcs_fq_file = gzip.open(f"{o.prefix}_read2_duplex.fq.gz", 'wt')
+    read1_simplex_fq_file = gzip.open(f"{o.prefix}_read1_simplex.fq.gz", 'wt')
+    read2_simplex_fq_file = gzip.open(f"{o.prefix}_read2_simplex.fq.gz", 'wt')
 
     # This block of code takes an unaligned bam file, extracts the tag 
     # sequences from the reads, and converts them to to "ab/ba" format 
@@ -411,11 +408,7 @@ def main():
     
     seq_dict = {'ab:1': [], 'ab:2': [], 'ba:1': [], 'ba:2': []}
     qual_dict = {'ab:1': [], 'ab:2': [], 'ba:1': [], 'ba:2': []}
-    fam_size_x_axis = []
-    fam_size_y_axis = []
 
-    read1_dcs_len = 0
-    read2_dcs_len = 0
     in_bam_file = pysam.AlignmentFile(
         f"{o.prefix}.temp.sort.bam", "rb", check_sq=False
         )
@@ -490,136 +483,84 @@ def main():
                         ]
                     qual_dict[tag_subtype] = qual_calc(qual_dict[tag_subtype])
                     numSSCS += 1
-            if o.write_sscs is True:
 
-                if len(seq_dict['ab:1']) != 0 and len(seq_dict['ab:2']) != 0:
-                    corrected_qual_score = map(
-                        lambda x: x if x < 41 else 41, qual_dict['ab:1']
-                        )
-                    corrQualStr = ''.join(
-                        chr(x + 33) for x in corrected_qual_score
-                        )
-                    read1_sscs_fq_file.write(f"@{tag}#ab/1 XF:Z:{seq_dict['ab:1'][1]}\n"
-                                             f"{seq_dict['ab:1'][0]}\n"
-                                             f"+{seq_dict['ab:1'][1]}\n"
-                                             f"{corrQualStr}\n"
-                                             )
+            read1_dcs_len = None
+            if len(seq_dict['ab:1']) != 0 and len(seq_dict['ba:2']) != 0:
+                dcs_read_1 = [
+                    consensus_caller(
+                        [seq_dict['ab:1'][0], seq_dict['ba:2'][0]],
+                        1,
+                        tag,
+                        False
+                        ),
+                    seq_dict['ab:1'][1], seq_dict['ba:2'][1]
+                    ]
+                dcs_read_1_qual = map(
+                    lambda x: x if x < 41 else 41,
+                    qual_calc([qual_dict['ab:1'], qual_dict['ba:2']])
+                    )
+                read1_dcs_len = len(dcs_read_1[0])
+                if dcs_read_1[0].count('N') / read1_dcs_len > o.Ncutoff:
+                    read1_dcs_len = None
+            read2_dcs_len = None
+            if len(seq_dict['ba:1']) != 0 and len(seq_dict['ab:2']) != 0:
+                dcs_read_2 = [
+                    consensus_caller(
+                        [seq_dict['ba:1'][0], seq_dict['ab:2'][0]],
+                        1,
+                        tag,
+                        False
+                        ),
+                    seq_dict['ba:1'][1], seq_dict['ab:2'][1]
+                    ]
+                dcs_read_2_qual = map(
+                    lambda x: x if x < 41 else 41,
+                    qual_calc([qual_dict['ba:1'], qual_dict['ab:2']])
+                    )
+                read2_dcs_len = len(dcs_read_2[0])
+                if dcs_read_2[0].count('N') / read2_dcs_len > o.Ncutoff:
+                    read2_dcs_len = None
 
-                    corrected_qual_score = map(
-                        lambda x: x if x < 41 else 41, qual_dict['ab:2']
-                        )
-                    corrQualStr = ''.join(
-                        chr(x + 33) for x in corrected_qual_score
-                        )
-                    read2_sscs_fq_file.write(f"@{tag}#ab/2 XF:Z:{seq_dict['ab:2'][1]}\n"
-                                             f"{seq_dict['ab:2'][0]}\n"
-                                             f"+{seq_dict['ab:2'][1]}\n"
-                                             f"{corrQualStr}\n"
-                                             )
-                
-                if len(seq_dict['ba:1']) != 0 and len(seq_dict['ba:2']) != 0:
-                    corrected_qual_score = map(
-                        lambda x: x if x < 41 else 41, qual_dict['ba:1']
-                        )
-                    corrQualStr = ''.join(
-                        chr(x + 33) for x in corrected_qual_score
-                        )
-                    read1_sscs_fq_file.write(f"@{tag}#ba/1 XF:Z:{seq_dict['ba:1'][1]}\n"
-                                             f"{seq_dict['ba:1'][0]}\n"
-                                             f"+{seq_dict['ba:1'][1]}\n"
-                                             f"{corrQualStr}\n"
-                                             )
-
-                    corrected_qual_score = map(
-                        lambda x: x if x < 41 else 41, qual_dict['ba:2']
-                        )
-                    corrQualStr = ''.join(
-                        chr(x + 33) for x in corrected_qual_score
-                        )
-                    read2_sscs_fq_file.write(f"@{tag}#ba/2 XF:Z:{seq_dict['ba:2'][1]}\n"
-                                             f"{seq_dict['ba:2'][0]}\n"
-                                             f"+{seq_dict['ba:2'][1]}\n"
-                                             f"{corrQualStr}\n"
-                                             )
-
-            if o.without_dcs is False:
-                if len(seq_dict['ab:1']) != 0 and len(seq_dict['ba:2']) != 0:
-                    numDCS += 1
-                    dcs_read_1 = [
-                        consensus_caller(
-                            [seq_dict['ab:1'][0], seq_dict['ba:2'][0]], 
-                            1, 
-                            tag, 
-                            False
-                            ),
-                        seq_dict['ab:1'][1], seq_dict['ba:2'][1]
-                        ]
-                    dcs_read_1_qual = map(
-                        lambda x: x if x < 41 else 41, 
-                        qual_calc([qual_dict['ab:1'], qual_dict['ba:2']])
-                        )
-                    read1_dcs_len = len(dcs_read_1[0])
-                    fam_size_x_axis.append(int(seq_dict['ab:1'][1]))
-                    fam_size_y_axis.append(int(seq_dict['ba:2'][1]))
-
-                    if dcs_read_1[0].count('N')/read1_dcs_len > o.Ncutoff:
-                        highN_DCS += 1
-                        dcs_read_1[0] = 'N' * read1_dcs_len
-                        dcs_read_1_qual = [0 for x in range(read1_dcs_len)]
-                else:
-                    failedDcs += 1
-                if len(seq_dict['ba:1']) != 0 and len(seq_dict['ab:2']) != 0:
-                    numDCS += 1
-                    dcs_read_2 = [
-                        consensus_caller(
-                            [seq_dict['ba:1'][0], seq_dict['ab:2'][0]], 
-                            1, 
-                            tag, 
-                            False
-                            ),
-                        seq_dict['ba:1'][1], seq_dict['ab:2'][1]
-                        ]
-                    dcs_read_2_qual = map(
-                        lambda x: x if x < 41 else 41, 
-                        qual_calc([qual_dict['ba:1'], qual_dict['ab:2']])
-                        )
-                    read2_dcs_len = len(dcs_read_2[0])
-
-                    if dcs_read_2[0].count('N')/read2_dcs_len > o.Ncutoff:
-                        highN_DCS += 1
-                        dcs_read_2[0] = 'N' * read2_dcs_len
-                        dcs_read_2_qual = [0 for x in range(read2_dcs_len)]
-                else:
-                    failedDcs += 1
-                if (read1_dcs_len != 0 
-                        and read2_dcs_len != 0 
-                        and tag.count('N') == 0 
-                        and 'A' * o.rep_filt not in tag 
-                        and 'C' * o.rep_filt not in tag 
-                        and 'G' * o.rep_filt not in tag 
-                        and 'T' * o.rep_filt not in tag
-                        ):
-                    r1QualStr = ''.join(chr(x + 33) for x in dcs_read_1_qual)
-                    r2QualStr = ''.join(chr(x + 33) for x in dcs_read_2_qual)
-                    read1_dcs_fq_file.write(
-                        f"@{tag}/1 XF:Z:{dcs_read_1[1]}:{dcs_read_1[2]}\n"
-                        f"{dcs_read_1[0]}\n"
-                        f"+{dcs_read_1[1]}:{dcs_read_1[2]}\n"
-                        f"{r1QualStr}\n"
-                        )
-                    read2_dcs_fq_file.write(
-                        f"@{tag}/2 XF:Z:{dcs_read_2[1]}:{dcs_read_2[2]}\n"
-                        f"{dcs_read_2[0]}\n"
-                        f"+{dcs_read_2[1]}:{dcs_read_2[2]}\n"
-                        f"{r2QualStr}\n"
-                        )
-                elif (tag.count('N') != 0 
-                        or 'A' * o.rep_filt in tag 
-                        or 'C' * o.rep_filt in tag 
-                        or 'G' * o.rep_filt in tag 
-                        or 'T' * o.rep_filt in tag
-                        ):
-                    badUMIs += 1
+            if (tag.count('N') != 0
+                    or 'A' * o.rep_filt in tag
+                    or 'C' * o.rep_filt in tag
+                    or 'G' * o.rep_filt in tag
+                    or 'T' * o.rep_filt in tag):
+                badUMIs += 1
+            elif read1_dcs_len is not None and read2_dcs_len is not None:
+                numDCS += 1
+                r1QualStr = ''.join(chr(x + 33) for x in dcs_read_1_qual)
+                r2QualStr = ''.join(chr(x + 33) for x in dcs_read_2_qual)
+                read1_dcs_fq_file.write(
+                    f"@{tag}/1 XF:Z:{dcs_read_1[1]}:{dcs_read_1[2]}\n"
+                    f"{dcs_read_1[0]}\n"
+                    f"+{dcs_read_1[1]}:{dcs_read_1[2]}\n"
+                    f"{r1QualStr}\n"
+                    )
+                read2_dcs_fq_file.write(
+                    f"@{tag}/2 XF:Z:{dcs_read_2[1]}:{dcs_read_2[2]}\n"
+                    f"{dcs_read_2[0]}\n"
+                    f"+{dcs_read_2[1]}:{dcs_read_2[2]}\n"
+                    f"{r2QualStr}\n"
+                    )
+            elif read1_dcs_len is not None:
+                numSimplex += 1
+                r1QualStr = ''.join(chr(x + 33) for x in dcs_read_1_qual)
+                read1_simplex_fq_file.write(
+                    f"@{tag}/1 XF:Z:{dcs_read_1[1]}:{dcs_read_1[2]}\n"
+                    f"{dcs_read_1[0]}\n"
+                    f"+{dcs_read_1[1]}:{dcs_read_1[2]}\n"
+                    f"{r1QualStr}\n"
+                    )
+            elif read2_dcs_len is not None:
+                numSimplex += 1
+                r2QualStr = ''.join(chr(x + 33) for x in dcs_read_2_qual)
+                read2_simplex_fq_file.write(
+                    f"@{tag}/2 XF:Z:{dcs_read_2[1]}:{dcs_read_2[2]}\n"
+                    f"{dcs_read_2[0]}\n"
+                    f"+{dcs_read_2[1]}:{dcs_read_2[2]}\n"
+                    f"{r2QualStr}\n"
+                    )
             
             if line != FinalValue:
                 readsCtr += 1
@@ -627,8 +568,6 @@ def main():
                 first_line = line
                 seq_dict = {'ab:1': [], 'ab:2': [], 'ba:1': [], 'ba:2': []}
                 qual_dict = {'ab:1': [], 'ab:2': [], 'ba:1': [], 'ba:2': []}
-                read1_dcs_len = 0
-                read2_dcs_len = 0
                 dcs_read_1 = ''
                 dcs_read_2 = ''
 
@@ -637,81 +576,11 @@ def main():
                 qual_dict[first_line.query_name.split('#')[1]].append(
                     list(first_line.query_qualities)
                     )
-    
-# Try to plot the tag family sizes
-    if o.tagstats is True:
-        tag_stats_file = open(o.prefix + ".tagstats.txt", 'w')
 
-        x_value = []
-        y_value = []
-        total_reads = sum(
-            [tag_count_dict[tag_family_size] 
-             * tag_family_size for tag_family_size in tag_count_dict.keys()
-             ])
-
-        for tag_family_size in sorted(tag_count_dict.keys()):
-            fraction = (tag_count_dict[tag_family_size] * tag_family_size) 
-            fraction /= float(total_reads)
-            tag_stats_file.write(
-                f'{tag_family_size}\t'
-                f'{tag_count_dict[tag_family_size]}\t'
-                f'{fraction}\n'
-                )
-            x_value.append(tag_family_size)
-            y_value.append(fraction)
-
-        try:
-            import matplotlib
-            matplotlib.use('Agg')
-            import matplotlib.pyplot as plt
-
-            plt.figure(1)
-            plt.bar(x_value, y_value)
-            plt.xlabel('Family Size')
-            plt.ylabel('Proportion of Total Reads')
-            plt.savefig(f"{o.prefix}_family_size.png", 
-                        bbox_inches='tight'
-                        )
-            plt.figure(2)
-            if len(fam_size_x_axis) != 0:
-                plt.scatter(fam_size_x_axis, fam_size_y_axis, alpha=.1)
-                plt.xlabel('Family size for AB:1')
-                plt.ylabel('Family size for BA:2')
-                plt.xlim(0, max(fam_size_x_axis))
-                plt.ylim(0, max(fam_size_y_axis))
-            plt.savefig(f"{o.prefix}_fam_size_relation.png", 
-                        bbox_inches='tight'
-                        )
-
-        except ImportError:
-            sys.stderr.write(
-                'matplotlib not present. Only tagstats file will be generated.'
-                )
-
-        tag_stats_file.close()
     endTime = datetime.datetime.now()
     # Print consensus making statistics
     startTimeStr = startTime.strftime("%A, %d. %B %Y %I:%M%p")
-    endTimeStr = endTime.strftime("%A, %d. %B %Y %I:%M%p")
-    cmStatsFile = open(f"{o.prefix}_cmStats.txt", 'w')
-    cmStatsFile.write(
-        f"Consensus Making Statistics:\n"
-        f"Command: {' '.join(sys.argv)}\n"
-        f"Started at {startTimeStr}\n"
-        f"Finished at {endTimeStr}\n"
-        f"{paired_end_count} reads UMI processed\n"
-        f"{readsCtr} reads processed\n"
-        f"{familyCtr} families processed\n"
-        f"\t{zeroFamilySize} unrepresented families\n"
-        f"\t{smallFamilySize} families with family size < {o.minmem}\n"
-        f"\t{badUMIs} families (DCS pairs) filtered for UMIs with mononucleotide repeats\n"
-        f"{numSSCS} SSCS made\n"
-        f"\t{highN_SSCS} SSCS filtered for excessive Ns\n"
-        f"{numDCS} DCS made\n"
-        f"\t{failedDcs} DCS failed due to missing SSCS\n"
-        f"\t{highN_DCS} DCS filtered for excessive Ns\n"
-        )
-    cmStatsFile.close()
+    endTimeStr = endTime.strftime('%A, %d. %B %Y %I:%M%p')
     sys.stderr.write(
         f"Consensus Making Statistics:\n"
         f"Command: {' '.join(sys.argv)}\n"
@@ -726,8 +595,7 @@ def main():
         f"{numSSCS} SSCS made\n"
         f"\t{highN_SSCS} SSCS filtered for excessive Ns\n"
         f"{numDCS} DCS made\n"
-        f"\t{failedDcs} DCS failed due to missing SSCS\n"
-        f"\t{highN_DCS} DCS filtered for excessive Ns\n"
+        f"\t{numSimplex} DCS simplex made\n"
         )
 
 if __name__ == "__main__":
