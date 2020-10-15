@@ -21,6 +21,7 @@ by collapsing these and finding the duplex pair to make a consensus call.
 * Python 3
 * pysam
 * biopython
+* cutadapt
 * bwa
 * samtools 
 * bedtools
@@ -28,9 +29,13 @@ by collapsing these and finding the duplex pair to make a consensus call.
 
 # Workflow
 
-First, clone the repository and install the pipeline 
+Clone the repository and install the pipeline (only performed one time)
 
 ```python setup.py install```
+
+First, remove adapters if any
+
+```cutadapt -a ADAPT1 -A ADAPT2 -o R1.fastq.gz -p R2.fastq.gz in1.fastq.gz in2.fastq.gz```
 
 Second, extract the tags from the reads and append them to the headers (use --help to see options)
 
@@ -46,8 +51,9 @@ Fourth, sort aligned reads by position
 
 Fifth, create consensus reads (use --help to see options)
 
-```create_consensus.py --filter-pair --filter-singleton --filter-soft-clip --filter-secondary aligned_sorted.bam```
+```create_consensus.py [options] aligned_sorted.bam```
 
-Now you can align with bwa again and compute variants following GATK best practices. 
+Now you can align with bwa again and compute variants following GATK best practices 
+(remember to not perform the MarkDuplicates step). 
 
 
