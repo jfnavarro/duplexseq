@@ -35,7 +35,7 @@ Clone the repository and install the pipeline (only performed one time)
 
 First, remove adapters if any
 
-```cutadapt -a ADAPT1 -A ADAPT2 -o R1.fastq.gz -p R2.fastq.gz in1.fastq.gz in2.fastq.gz```
+```cutadapt -a ADAPT1 -A ADAPT2 --action mask -j 0 -o R1.fastq.gz -p R2.fastq.gz in1.fastq.gz in2.fastq.gz```
 
 Second, extract the tags from the reads and append them to the headers (use --help to see options)
 
