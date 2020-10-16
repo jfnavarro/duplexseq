@@ -3,8 +3,8 @@
 This tool creates consensus reads using aligned paired-end reads generated with
 the Duplex Sequencing method. The UMIs must be in the headers like this:
 
-HWI-ST1390:273:CDTB8ACXX:6:2316:21033:100486|ATACTGTCAATT#ab
-HWI-ST1390:273:CDTB8ACXX:6:2316:21033:100486|ATACTGTCAATT#ba
+HWI-ST1390:273:CDTB8ACXX:6:2316:21033:100486_ATACTGTCAATT
+HWI-ST1390:273:CDTB8ACXX:6:2316:21033:100486_ATACTGTCAATT
 ...
 
 This is a simplified, modified version of the code present in:
@@ -15,9 +15,10 @@ Input:
 	A position-sorted paired-end BAM file containing reads with a duplex UMI in the header.
 
 Output:
-	1: A pair of FASTQ files containing the duplexs
-	2: A pair of FASTQ files containing the simplexs
-	3: A BAM file containing discarded reads
+	1: A pair of FASTQ files containing the paired duplexs
+	2: A pair of FASTQ files containing the unpaired duplexs
+	3: A pair of FASTQ files containing the consensus reads
+	4: A BAM file containing discarded reads
 
 Author: jc.fernandez.navarro@gmail.com
 """
@@ -27,37 +28,39 @@ from fastqutils import *
 from collections import defaultdict, Counter
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
+
 # TODO add option to clusters tags allowing for mismatches
 # TODO add option to cluster tags with a window size in position
 
 def consensus_maker(grouped_reads_list, cut_off):
-    # Reads must have the same length
-    # Create a consensus read using the most_common letter from each position
-    read_length = len(grouped_reads_list[0])
+    """
+    Create a consensus read using the most_common letter from each position
+    """
     num_reads = float(len(grouped_reads_list))
-    counters = [Counter([x[i] for x in grouped_reads_list]) for i in range(read_length)]
+    counters = [Counter(x) for x in zip(*grouped_reads_list)]
     consensus_read = ''.join(
         [c.most_common()[0][0] if (c.most_common()[0][1] / num_reads) >= cut_off else 'N' for c in counters])
     return consensus_read
 
+
 def consensus_quality(qual_list):
-    # Qualities must have the same length
-    # Create a consensus quality using the average of the qualities
+    """
+    Create a consensus quality using the average of the qualities
+    """
     qual_avg = [int(sum(qual_score) / len(qual_list)) for qual_score in zip(*qual_list)]
     return [x if x < 41 else 41 for x in qual_avg]
+
 
 def main():
     parser = ArgumentParser(description=__doc__,
                             formatter_class=RawDescriptionHelpFormatter)
     parser.add_argument('infile', type=str, help="input BAM file")
-    parser.add_argument("--outfile", action="store", dest="outfile", help="output BAM file [out.bam]",
-                        default="out_duplex.bam")
     parser.add_argument('--min-reads', type=int, default=2, dest='min_reads',
                         help="Minimum number of reads allowed to comprise a consensus. [2]")
     parser.add_argument('--max-reads', type=int, default=1000, dest='max_reads',
                         help="Maximum number of reads allowed to comprise a consensus. [1000]")
-    parser.add_argument('--homo-count', type=int, default=5, dest='rep_filt',
-                        help="Maximum number of homopolymer supported in the tag [A, C, G, T]. [5]")
+    parser.add_argument('--homo-count', type=int, default=8, dest='rep_filt',
+                        help="Maximum number of homopolymer supported in the UMI [A, C, G, T]. [8]")
     parser.add_argument('--cutoff', type=float, default=.7, dest='cut_off',
                         help="Percentage of nucleotides at a given position in a read that must be identical in order "
                              "for a consensus to be called at that position. [0.7]")
@@ -150,10 +153,14 @@ def main():
     print("Creating consensus reads...")
     out_R1_handle = gzip.open("duplex_R1.fq.gz", 'wt')
     out_R1_writer = writefq(out_R1_handle)
+    out_R1_consensus_handle = gzip.open("consensus_R1.fq.gz", 'wt')
+    out_R1_consensus_writer = writefq(out_R1_consensus_handle)
     out_R1_simplex_handle = gzip.open("simplex_R1.fq.gz", 'wt')
     out_R1_simplex_writer = writefq(out_R1_simplex_handle)
     out_R2_handle = gzip.open("duplex_R2.fq.gz", 'wt')
     out_R2_writer = writefq(out_R2_handle)
+    out_R2_consensus_handle = gzip.open("consensus_R2.fq.gz", 'wt')
+    out_R2_consensus_writer = writefq(out_R2_consensus_handle)
     out_R2_simplex_handle = gzip.open("simplex_R2.fq.gz", 'wt')
     out_R2_simplex_writer = writefq(out_R2_simplex_handle)
     for pos, tag_records in read_dict.items():
@@ -163,7 +170,7 @@ def main():
             qualities = [x.query_qualities for x in records]
             num_sequences = len(sequences)
             first_length = len(sequences[0])
-            if num_sequences >= min_reads and num_sequences <= max_reads and\
+            if num_sequences >= min_reads and num_sequences <= max_reads and \
                     all(len(x) == first_length for x in sequences):
                 consensus = consensus_maker(sequences, cut_off)
                 consensus_qual = consensus_quality(qualities)
@@ -171,31 +178,48 @@ def main():
                 if do_N_filter and (consensus.count("N") / float(len(consensus)) >= Ncut_off):
                     continue
                 consensus_count += 1
-                tag_clean, info = tag.split("#")
-                consensus_dict[tag_clean][info] = (consensus, consensus_qual)
+                #  Store records (there must be one record per tag)
+                clean_tag, info = tag.split(":")
+                consensus_dict[clean_tag][info] = (consensus, consensus_qual)
+                if info == '1':
+                    out_R1_consensus_writer.send(("{}:{}/1".format(clean_tag, num_sequences),
+                                                  consensus, ''.join(chr(x + 33) for x in consensus_qual)))
+                else:
+                    out_R2_consensus_writer.send(("{}:{}/2".format(clean_tag, num_sequences),
+                                                  consensus, ''.join(chr(x + 33) for x in consensus_qual)))
         # Iterate consensus dict to find duplexs otherwise write simplex
+        processed = set()
         for tag, record in consensus_dict.items():
+            #  Create reversed tag
+            switch_tag = "{}{}".format(tag[int(len(tag) / 2):],
+                                       tag[:int(len(tag) / 2)])
+
             duplex_read1 = None
             duplex_read2 = None
-            if len(record['ab:1']) != 0 and len(record['ba:2']) != 0:
-                duplex_seq = consensus_maker([record['ab:1'][0],
-                                              record['ba:2'][0]],
-                                             1.0)
-                duplex_qual = consensus_quality([record['ab:1'][1],
-                                                 record['ba:2'][1]])
-                # Filter out duplex with too many Ns in them
-                if not (do_N_filter and (duplex_seq.count("N") / float(len(duplex_seq)) >= Ncut_off)):
-                    duplex_read1 = (tag, duplex_seq, ''.join(chr(x + 33) for x in duplex_qual))
+            if switch_tag in consensus_dict and switch_tag not in processed:
+                if len(record['1']) != 0 and len(consensus_dict[switch_tag]['2']) != 0:
+                    duplex_seq = consensus_maker([record['1'][0],
+                                                  consensus_dict[switch_tag]['2'][0]],
+                                                 1.0)
+                    duplex_qual = consensus_quality([record['1'][1],
+                                                     consensus_dict[switch_tag]['2'][1]])
+                    # Filter out duplex with too many Ns in them
+                    if not (do_N_filter and (duplex_seq.count("N") / float(len(duplex_seq)) >= Ncut_off)):
+                        duplex_read1 = (tag + "/1", duplex_seq, ''.join(chr(x + 33) for x in duplex_qual))
 
-            if len(record['ba:1']) != 0 and len(record['ab:2']) != 0:
-                duplex_seq = consensus_maker([record['ba:1'][0],
-                                              record['ab:2'][0]],
-                                             1.0)
-                duplex_qual = consensus_quality([record['ba:1'][1],
-                                                 record['ab:2'][1]])
-                # Filter out duplex with too many Ns in them
-                if not (do_N_filter and (duplex_seq.count("N") / float(len(duplex_seq)) >= Ncut_off)):
-                    duplex_read2 = (tag, duplex_seq, ''.join(chr(x + 33) for x in duplex_qual))
+                if len(record['2']) != 0 and len(consensus_dict[switch_tag]['1']) != 0:
+                    duplex_seq = consensus_maker([record['2'][0],
+                                                  consensus_dict[switch_tag]['1'][0]],
+                                                 1.0)
+                    duplex_qual = consensus_quality([record['2'][1],
+                                                     consensus_dict[switch_tag]['1'][1]])
+                    # Filter out duplex with too many Ns in them
+                    if not (do_N_filter and (duplex_seq.count("N") / float(len(duplex_seq)) >= Ncut_off)):
+                        duplex_read2 = (tag + "/2", duplex_seq, ''.join(chr(x + 33) for x in duplex_qual))
+
+                #  To not visit this duplex again
+                processed.add(switch_tag)
+                processed.add(tag)
 
             if duplex_read1 is not None and duplex_read2 is not None:
                 duplex_count += 1
@@ -208,14 +232,22 @@ def main():
                 simplex_count += 1
                 out_R2_simplex_writer.send(duplex_read2)
 
+    out_R1_handle.close()
+    out_R2_handle.close()
+    out_R1_consensus_handle.close()
+    out_R2_consensus_handle.close()
+    out_R1_simplex_handle.close()
+    out_R2_simplex_handle.close()
+
     # Write summary statistics
     print("Summary:")
     print("Reads processed: {}".format(reads_count))
     print("Reads discarded: {}".format(reads_count - reads_count_filtered))
     print("Reads passing filters: {}".format(reads_count_filtered))
-    print("Consensus Made: {}".format(consensus_count))
-    print("Duplex Made: {}".format(duplex_count))
-    print("Simplex Made: {}".format(simplex_count))
+    print("Consensus made (paired and unpaired): {}".format(consensus_count))
+    print("Duplex paired made: {}".format(duplex_count))
+    print("Duplex unpaired made: {}".format(simplex_count))
+
 
 if __name__ == "__main__":
     main()

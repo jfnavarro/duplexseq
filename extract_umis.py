@@ -4,11 +4,6 @@ This tool extracts UMIs from pair-end reads (FASTQ) generated with duplex
 sequencing protocol. The UMIs (1 and 2) are extracted from the beginning of the reads
 (R1 and R2) and are then appended to the read names.
 
-The appended UMI will contain extra info:
-
-#ab if UMI in R1 is bigger than the UMI in R2
-#ba if UMI in R2 is bigger than the UMI in R1
-
 This is a simplified, modified version of the code present in:
 
 https://github.com/Kennedy-Lab-UW/Duplex-Sequencing
@@ -46,14 +41,17 @@ def main():
 	parser.add_argument('infile2', type=str, help='Path to FASTQ gzipped file for R2')
 	parser.add_argument('--out-prefix', dest='out_prefix', type=str, default="out",
 						help='Prefix to prepend to the output files. [out]')
-	parser.add_argument('--taglen', dest='taglen', type=int, default=6,
-						help='Length in bases of the tag sequence. [6]')
-	parser.add_argument('--spacerlen', dest='spclen', type=int, default=1,
-						help='Length in bases to trim after the tag [1]')
+	parser.add_argument('--umi-length', dest='taglen', type=int, default=6,
+						help='Length in bases of the UMI sequence. [6]')
+	parser.add_argument('--spacer-length', dest='spclen', type=int, default=1,
+						help='Length in bases to trim after the UMI [1]')
+	parser.add_argument('--filter-same-umi', action="store_true", default=False, dest='sametag_filter',
+						help="Discard read pairs whose UMI are identical (A and B)")
 	o = parser.parse_args()
 
 	reads_count = 0
 	badtags_count = 0
+	sametag_count = 0
 	barcode_dict = defaultdict(lambda: 0)
 
 	R1_handle = gzip.open(o.infile1, "rt")
@@ -67,8 +65,11 @@ def main():
 		reads_count += 1
 		tag1 = seq1[:o.taglen]
 		tag2 = seq2[:o.taglen]
-		if tag1.isalpha() and tag1.count('N') == 0 and tag2.isalpha() and tag2.count('N') == 0 and tag1 != tag2:
-			tag = tag1 + tag2 + "#ab" if tag1 > tag2 else tag2 + tag1 + "#ba"
+		if o.sametag_filter and tag1 != tag2:
+			sametag_count += 1
+			continue
+		if tag1.isalpha() and tag1.count('N') == 0 and tag2.isalpha() and tag2.count('N') == 0:
+			tag = tag1 + tag2
 			out_R1_writer.send((rename_read(header1, tag),
 								seq1[o.taglen + o.spclen:],
 								qua1[o.taglen + o.spclen:]))
@@ -83,9 +84,11 @@ def main():
 	out_R1_handle.close()
 	out_R2_handle.close()
 
-	print("Total reads processed: {}".format(reads_count))
-	print("Unique tags: {}".format(len(barcode_dict.keys())))
-	print("Discarded reads with bad tags: {}".format(badtags_count))
+	print("Total read pairs processed: {}".format(reads_count))
+	print("Unique UMIs found: {}".format(len(barcode_dict.keys())))
+	if o.sametag_filter:
+		print("Discarded read pairs with same UMI: {}".format(sametag_count))
+	print("Discarded read pairs with a bad UMI: {}".format(badtags_count))
 
 if __name__ == "__main__":
 	main()
