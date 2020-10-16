@@ -1,19 +1,19 @@
 # Duplexseq
 A pipeline to make consensus sequences from duplex sequencing 
 
-This is a simplified and modified version of the work introduced in 
+This is a simplified and modified version of the work introduced in:
 
 Duplex Sequencing software Version 3.0 July 11, 2016 Programs by Scott Kennedy(1) (1) 
 Department of Pathology, University of Washington School of Medicine, Seattle, WA 98195
 
 https://github.com/Kennedy-Lab-UW/Duplex-Sequencing
 
-In summary, tags are extracted from the reads and appended to the headers. 
+In summary, UMIs are extracted from the reads and appended to the headers. 
 The reads are then clustered by tag-position and the consensus reads are created
-by collapsing these and finding the duplex pair to make a consensus call. 
+by collapsing these, finally duplex are made using the consensus reads. 
 
 # Notes
-- TAGs must be located at the beginning of the reads (0 position)
+- UMIs must be located at the beginning of the reads (0 position)
 - The reads belonging to a tag-position cluster must have the same length or otherwise will be discarded.
 - Different filters can be applied when creating the consensus reads (check --help)
 
@@ -21,6 +21,7 @@ by collapsing these and finding the duplex pair to make a consensus call.
 * Python 3
 * pysam
 * biopython
+* cutadapt
 * bwa
 * samtools 
 * bedtools
@@ -28,9 +29,13 @@ by collapsing these and finding the duplex pair to make a consensus call.
 
 # Workflow
 
-First, clone the repository and install the pipeline 
+Clone the repository and install the pipeline (only performed one time)
 
 ```python setup.py install```
+
+First, remove adapters if any
+
+```cutadapt -a ADAPT1 -A ADAPT2 --action mask -j 0 -o R1.fastq.gz -p R2.fastq.gz in1.fastq.gz in2.fastq.gz```
 
 Second, extract the tags from the reads and append them to the headers (use --help to see options)
 
@@ -46,8 +51,9 @@ Fourth, sort aligned reads by position
 
 Fifth, create consensus reads (use --help to see options)
 
-```create_consensus.py --filter-pair --filter-singleton --filter-soft-clip --filter-secondary aligned_sorted.bam```
+```create_consensus.py [options] aligned_sorted.bam```
 
-Now you can align with bwa again and compute variants following GATK best practices. 
+Now you can align with bwa again and compute variants following GATK best practices 
+(remember to not perform the MarkDuplicates step). 
 
 
