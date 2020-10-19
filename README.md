@@ -53,4 +53,11 @@ Fifth, create consensus reads (use --help to see options)
 Now you can align with bwa again and compute variants following GATK best practices 
 (remember to not perform the MarkDuplicates step). 
 
+# License
+MIT License, see LICENSE file.
+
+# Authors
+Jose Fernandez Navarro <jc.fernandez.navarro@gmail.com>
+
+
 
