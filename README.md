@@ -17,7 +17,6 @@ by collapsing these, finally duplex are made using the consensus reads.
 # Requirements
 * Python 3
 * pysam
-* biopython
 * cutadapt
 * bwa
 * samtools 
