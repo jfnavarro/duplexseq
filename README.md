@@ -21,7 +21,6 @@ by collapsing these, finally duplex are made using the consensus reads.
 * cutadapt
 * bwa
 * samtools 
-* bedtools
 * GATK
 
 # Workflow
