@@ -30,8 +30,7 @@ setup(
   zip_safe=False,
   install_requires=[
     'setuptools',
-    'pysam',
-    'biopython'
+    'pysam'
   ],
   #test_suite = 'tests',
   scripts=glob.glob('*.py'),
