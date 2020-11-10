@@ -48,6 +48,18 @@ Fifth, create consensus reads (use --help to see options)
 
 ```create_consensus.py [options] aligned_sorted.bam```
 
+This tool will generate three pairs of FASTQ files:
+
+- consensus_R1/2 = all the reads (unpaired and paired) where 
+a consensus was made (number of reads used in the consensus 
+is included in the reads names).
+
+- duplex_R1/2 = all the consensus reads where a duplex was found
+and made in both pairs
+
+- duplex_unpaires_R1/2 = all the consensus reads where a duplex
+was found and made in either one of the pairs.
+
 Now you can align with bwa again and compute variants following GATK best practices 
 (remember to not perform the MarkDuplicates step). 
 
