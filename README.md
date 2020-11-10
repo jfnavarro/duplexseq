@@ -34,7 +34,7 @@ First, remove adapters if any
 
 Second, extract the tags from the reads and append them to the headers (use --help to see options)
 
-```extract_umis.py R1.fastq.gz R2.fastq.gz```
+```extract_umis.py [options] R1.fastq.gz R2.fastq.gz```
 
 Third, align reads to the reference genome
 
