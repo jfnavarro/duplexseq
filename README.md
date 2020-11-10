@@ -1,5 +1,5 @@
 # Duplexseq
-A pipeline to make consensus sequences from duplex sequencing with UMIs
+A pipeline to make consensus reads from duplex sequencing with UMIs
 
 This is a simplified and modified version of the workflow introduced in:
 
@@ -57,7 +57,7 @@ is included in the reads names).
 - duplex_R1/2 = all the consensus reads where a duplex was found
 and made in both pairs
 
-- duplex_unpaires_R1/2 = all the consensus reads where a duplex
+- duplex_unpaired_R1/2 = all the consensus reads where a duplex
 was found and made in either one of the pairs.
 
 Now you can align with bwa again and compute variants following GATK best practices 
