@@ -3,8 +3,8 @@ A pipeline to make consensus reads from duplex sequencing with UMIs
 
 This is a simplified and modified version of the workflow introduced in:
 
-Duplex Sequencing software Version 3.0 July 11, 2016 Programs by Scott Kennedy(1) (1) 
-Department of Pathology, University of Washington School of Medicine, Seattle, WA 98195
+Kennedy et al. Detecting ultralow-frequency mutations by Duplex Sequencing.
+Nature Protocols, 2013.
 
 In summary, UMIs are extracted from the reads and appended to the headers. 
 The reads are then clustered by tag-position and the consensus reads are created
