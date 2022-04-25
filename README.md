@@ -13,6 +13,10 @@ by collapsing these, finally duplex are made using the consensus reads.
 # Notes
 - UMIs must be located at the beginning of the reads (0 position)
 - Different filters can be applied when creating the consensus reads (check --help)
+- This project is far from being optimal from an engineering point of view, create_consensus.py
+relies on dictionaries which makes it fast but not memmory efficient. One possible trick to 
+decrease memory comsuption is to split the mapped BAM file by chromosome and process these
+separetely. The resulting files can be merged into a single file. 
 
 # Requirements
 * Python 3
